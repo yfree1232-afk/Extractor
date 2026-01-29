@@ -1,0 +1,68 @@
+{
+  "name": "𝖤𝖣𝖴𝖢𝖠𝖳𝖨𝖮𝖭 𝖧𝖴𝖡",
+  "description": "Telegram Bot using Pyrogram",
+  "repository": "https://github.com/Pod94",
+  "env": {
+    "API_ID": {
+      "description": "Your Telegram API ID",
+      "value": "20567114",
+      "required": true
+    },
+    "API_HASH": {
+      "description": "Your Telegram API Hash",
+      "value": "8a5b92106e45fc6637a65a67df060a65",
+      "required": true
+    },
+    "BOT_TOKEN": {
+      "description": "Your Telegram Bot Token",
+      "value": "8024972578:AAFahP8njNmQjN7Xywyo8BQ9Z_Q-232K7CI",
+      "required": true
+    },
+    "BOT_USERNAME": {
+      "description": "Your Bot Username",
+      "value": "@AshuExtractorBot",
+      "required": true
+    },
+    "OWNER_ID": {
+      "description": "Your Telegram User ID (Owner)",
+      "value": "8036182138",
+      "required": true
+    },
+    "SUDO_USERS": {
+      "description": "Comma-separated list of sudo users' IDs",
+      "value": "8036182138",
+      "required": false
+    },
+    "CHANNEL_ID": {
+      "description": "Your channel ID",
+      "value": "-1002829360841",
+      "required": true
+    },
+    "MONGO_URL": {
+      "description": "Your MongoDB URL",
+      "value": "mongodb+srv://Demo23:Demo23@cluster0.fjar36c.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
+      "required": true
+    },
+    "PREMIUM_LOGS": {
+      "description": "Flag for premium logs (0 for off, 1 for on)",
+      "value": "-1002829360841",
+      "required": true
+    }
+  },
+  "formation": {
+        "worker": {
+            "quantity": 1,
+            "size": "standard-2x"
+        }
+    }, 
+  "stack": "heroku-22",
+  "addons": [],
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    },
+    {
+      "url": "https://github.com/jonathanong/heroku-buildpack-ffmpeg-latest.git"
+    }
+  ]
+}
