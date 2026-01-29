@@ -15,16 +15,16 @@ BOT_TEXT = "@Txtextractorxxbot"
 OWNER_ID = int(os.environ.get("OWNER_ID", "8342248523"))
 # ------------------------------------------------
 # //LOG CHANNEL ID 
-CHANNEL_ID = int(os.environ.get("CHANNEL_ID", "-3851031286"))
+CHANNEL_ID = int(os.environ.get("CHANNEL_ID", "-1003851031286"))
 
 # //FORCE_CHANNEL_ID
-CHANNEL_ID2 = int(os.environ.get("CHANNEL_ID2", "-3893979749"))
+CHANNEL_ID2 = int(os.environ.get("CHANNEL_ID2", "-1003893979749"))
 # ------------------------------------------------
 MONGO_URL = os.environ.get("MONGO_URL", "mongodb+srv://vikassonawale0:JWyQFas7vlG1bkaL@cluster0.beermge.mongodb.net/?retryWrites=true&w=majority")
 # -----------------------------------------------
-PREMIUM_LOGS = int(os.environ.get("PREMIUM_LOGS", "-3695294021"))
+PREMIUM_LOGS = int(os.environ.get("PREMIUM_LOGS", "-1003695294021"))
 # -----------------------------------------------
-join = '<a href="https://t.me/ifsashu1">✳️ JOIN BACKUP</a>'
+join = '<a href="https://t.me/Anonymousextractor">✳️ JOIN BACKUP</a>'
 # -----------------------------------------------
 UNSPLASH_ACCESS_KEY = 'RabDRmuXXBobanmwwbvpP5LwoG4J8ox34y5Sstz-9jk'
 # -----------------------------------------------
