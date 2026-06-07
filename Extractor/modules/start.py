@@ -13,10 +13,9 @@ from Extractor import app
 from config import OWNER_ID, CHANNEL_ID
 from Extractor.core import script
 from Extractor.core.func import subscribe, chk_user
-# from Extractor.modules.cdsfree import handle_cds_journey, handle_cds_callback, handle_batch_message
-# from Extractor.modules.appex_v1 import api_v1
-# from Extractor.modules.appex_v2 import appex_v2_txt
-# from Extractor.modules.appex_v3 import appex_v5_txt
+from Extractor.modules.appex_v1 import api_v1
+from Extractor.modules.appex_v2 import appex_v2_txt, appex_v2_cmd
+from Extractor.modules.appex_v3 import appex_v3_txt, appex_v3_cmd
 from Extractor.modules.appex_v4 import appex_v5_txt
 from Extractor.modules.classplus import classplus_txt
 from Extractor.modules.pw import pw_login
