@@ -109,7 +109,10 @@ async def process_video(api_base, bi, si, sn, ti, tn, video, hdr1):
         if fl:
             dfl = decrypt(fl)
             if dfl:
-                final_link = f"https://youtu.be/{dfl}"
+                if '.m3u8' in dfl or '.mp4' in dfl or '/' in dfl:
+                    final_link = f"https://appxsignurl.vercel.app/appx/{dfl}?appxv=3"
+                else:
+                    final_link = f"https://youtu.be/{dfl}"
                 lines.append(f"{vt}:{final_link}\n")
 
         if vl:
