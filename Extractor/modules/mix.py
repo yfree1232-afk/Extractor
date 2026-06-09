@@ -94,12 +94,22 @@ async def fetch_item_details(api_base, course_id, item, headers):
         data = r4.get("data")
         vt = data.get("Title", "")
         vl = data.get("download_link", "")
+        fl = data.get("video_id", "")
+        
+        if fl:
+            dfl = decrypt(fl)
+            if dfl:
+                if '.m3u8' in dfl or '.mp4' in dfl or 'genomic' in dfl or '/' in dfl:
+                    final_link = f"https://appxsignurl.vercel.app/appx/{dfl}?appxv=3"
+                else:
+                    final_link = f"https://youtu.be/{dfl}"
+                outputs.append(f"{vt}:{final_link}")
 
         if vl:
             dvl = decrypt(vl)
-            if dvl:
+            if dvl and ".pdf" not in dvl.lower():
                 outputs.append(f"{vt}:{dvl}")
-        else:
+        elif not fl:
             for link in data.get("encrypted_links", []):
                 a = link.get("path")
                 k = link.get("key")
