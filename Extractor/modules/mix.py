@@ -81,11 +81,12 @@ async def safe_fetch_json(url, headers, max_retries=4):
         await asyncio.sleep(2 * (attempt + 1))
     return None
 
-async def fetch_item_details(api_base, course_id, item, headers):
+async def fetch_item_details(api_base, course_id, item, headers, current_path=""):
     try:
         fi = item.get("id")
-        vt = item.get("Title", "")
+        vt = item.get("name") or item.get("Title", "") or item.get("title", "")
         outputs = []
+        prefix = f"[{current_path}] " if current_path else ""
 
         r4 = await safe_fetch_json(f"{api_base}/get/fetchVideoDetailsById?course_id={course_id}&folder_wise_course=1&ytflag=0&video_id={fi}", headers)
         if not r4 or not r4.get("data"):
@@ -96,6 +97,9 @@ async def fetch_item_details(api_base, course_id, item, headers):
         vl = data.get("download_link", "")
         fl = data.get("video_id", "")
         
+        vt_api = data.get("Title", "")
+        if not vt: vt = vt_api
+        
         if fl:
             dfl = decrypt(fl)
             if dfl:
@@ -103,12 +107,12 @@ async def fetch_item_details(api_base, course_id, item, headers):
                     final_link = f"https://appxsignurl.vercel.app/appx/{dfl}?appxv=3"
                 else:
                     final_link = f"https://youtu.be/{dfl}"
-                outputs.append(f"{vt}:{final_link}")
+                outputs.append(f"{prefix}{vt} : {final_link}")
 
         if vl:
             dvl = decrypt(vl)
             if dvl and ".pdf" not in dvl.lower():
-                outputs.append(f"{vt}:{dvl}")
+                outputs.append(f"{prefix}{vt} : {dvl}")
         elif not fl:
             for link in data.get("encrypted_links", []):
                 a = link.get("path")
@@ -146,7 +150,7 @@ async def fetch_item_details(api_base, course_id, item, headers):
         logger.error(f"Error fetching item details: {e}")
         return []
 
-async def fetch_folder_contents(api_base, course_id, folder_id, headers):
+async def fetch_folder_contents(api_base, course_id, folder_id, headers, current_path=""):
     try:
         outputs = []
         j = await safe_fetch_json(f"{api_base}/get/folder_contentsv2?course_id={course_id}&parent_id={folder_id}", headers)
@@ -156,9 +160,12 @@ async def fetch_folder_contents(api_base, course_id, folder_id, headers):
         tasks = []
         if "data" in j:
             for item in j["data"]:
-                tasks.append(fetch_item_details(api_base, course_id, item, headers))
+                item_name = item.get("name") or item.get("Title", "") or item.get("title", "")
                 if item.get("material_type") == "FOLDER":
-                    tasks.append(fetch_folder_contents(api_base, course_id, item["id"], headers))
+                    new_path = f"{current_path} → {item_name}" if current_path else item_name
+                    tasks.append(fetch_folder_contents(api_base, course_id, item["id"], headers, new_path))
+                else:
+                    tasks.append(fetch_item_details(api_base, course_id, item, headers, current_path))
 
         if tasks:
             results = await asyncio.gather(*tasks)
