@@ -113,6 +113,9 @@ button1 = [
                     InlineKeyboardButton("🎖️ Rᴀɴᴋᴇʀs Gᴜʀᴜᴋᴜʟ", callback_data="maintainer_")
                 ],
                 [
+                    InlineKeyboardButton("✨ Custom Appx", callback_data="custom_appx_login")
+                ],
+                [
                     InlineKeyboardButton("« 𝐁 𝐀 𝐂 𝐊 »", callback_data="modes_")
                 ]
                 ]
