@@ -293,7 +293,15 @@ async def appex_v5_txt(app, message, api, name):
 
     scraper = cloudscraper.create_scraper() 
     try:
-        r = scraper.get(f"{api_base}/get/mycoursev2?userid={userid}", headers=hdr1)
+        r = None
+        for attempt in range(5):
+            r = scraper.get(f"{api_base}/get/mycoursev2?userid={userid}", headers=hdr1)
+            if r.status_code == 429:
+                import asyncio
+                await asyncio.sleep(2 * (attempt + 1))
+                continue
+            break
+            
         if r.status_code != 200:
             return await message.reply_text(f"❌ **Server blocked the request!**\nStatus: {r.status_code}\nResponse:\n`{r.text[:500]}`")
         mc1 = r.json()
