@@ -21,23 +21,26 @@ from config import PREMIUM_LOGS, join
 from datetime import datetime
 import pytz
 
-
-
-
 india_timezone = pytz.timezone('Asia/Kolkata')
 current_time = datetime.now(india_timezone)
 time_new = current_time.strftime("%d-%m-%Y %I:%M %p")
 
+# Unified Mobile Emulation Cloudscraper
+global_scraper = cloudscraper.create_scraper()
+ANDROID_UA = "Dalvik/2.1.0 (Linux; U; Android 11; SM-G991B Build/RP1A.200720.012)"
 
 def decrypt(enc):
-    enc = b64decode(enc.split(':')[0])
-    key = '638udh3829162018'.encode('utf-8')
-    iv = 'fedcba9876543210'.encode('utf-8')
-    if len(enc) == 0:
+    try:
+        enc = b64decode(enc.split(':')[0])
+        key = '638udh3829162018'.encode('utf-8')
+        iv = 'fedcba9876543210'.encode('utf-8')
+        if len(enc) == 0:
+            return ""
+        cipher = AES.new(key, AES.MODE_CBC, iv)
+        plaintext = unpad(cipher.decrypt(enc), AES.block_size)
+        return plaintext.decode('utf-8')
+    except:
         return ""
-    cipher = AES.new(key, AES.MODE_CBC, iv)
-    plaintext = unpad(cipher.decrypt(enc), AES.block_size)
-    return plaintext.decode('utf-8')
 
 def decode_base64(encoded_str):
     try:
@@ -46,45 +49,57 @@ def decode_base64(encoded_str):
         return decoded_str
     except Exception as e:
         return f"Error decoding string: {e}"
-async def fetch(session, url, headers):
+
+def sync_fetch(url, headers):
     try:
-        async with session.get(url, headers=headers) as response:
-            if response.status != 200:
-                print(f"Error fetching {url}: {response.status}")
-                return {}
-            content = await response.text()
-            
-            soup = BeautifulSoup(content, 'html.parser')
-            return json.loads(str(soup))
+        r = global_scraper.get(url, headers=headers)
+        if r.status_code == 200:
+            try:
+                return r.json()
+            except:
+                soup = BeautifulSoup(r.text, 'html.parser')
+                return json.loads(str(soup))
     except Exception as e:
-        print(f"An error occurred while fetching {url}: {str(e)}")
+        print(f"Sync fetch error: {e}")
+    return {}
+
+async def fetch(url, headers):
+    return await asyncio.to_thread(sync_fetch, url, headers)
+
+def sync_post(url, data, headers):
+    try:
+        return global_scraper.post(url, data=data, headers=headers).json()
+    except Exception as e:
         return {}
 
+def sync_get(url, headers):
+    try:
+        return global_scraper.get(url, headers=headers).json()
+    except Exception as e:
+        return {}
 
-async def handle_course(session, api_base, bi, si, sn, topic, hdr1):
+async def handle_course(api_base, bi, si, sn, topic, hdr1):
     ti = topic.get("topicid")
     tn = topic.get("topic_name")
     
     url = f"{api_base}/get/livecourseclassbycoursesubtopconceptapiv3?courseid={bi}&subjectid={si}&topicid={ti}&conceptid=&start=-1"
-    r3 = await fetch(session, url, hdr1)
-    video_data = sorted(r3.get("data", []), key=lambda x: x.get("id"))  
-
+    r3 = await fetch(url, hdr1)
+    video_data = sorted(r3.get("data", []), key=lambda x: x.get("id", 0))  
     
-    tasks = [process_video(session, api_base, bi, si, sn, ti, tn, video, hdr1) for video in video_data]
+    tasks = [process_video(api_base, bi, si, sn, ti, tn, video, hdr1) for video in video_data]
     results = await asyncio.gather(*tasks)
     
     return [line for lines in results if lines for line in lines]
 
-async def process_video(session, api_base, bi, si, sn, ti, tn, video, hdr1):
+async def process_video(api_base, bi, si, sn, ti, tn, video, hdr1):
     vi = video.get("id")
     vn = video.get("Title")
     lines = []
     
     try:
-        r4 = await fetch(session, f"{api_base}/get/fetchVideoDetailsById?course_id={bi}&video_id={vi}&ytflag=0&folder_wise_course=0", hdr1)
+        r4 = await fetch(f"{api_base}/get/fetchVideoDetailsById?course_id={bi}&video_id={vi}&ytflag=0&folder_wise_course=0", hdr1)
         
         if not r4 or not r4.get("data"):
-            print(f"Skipping video ID {vi}: No data found.")
             return None
 
         vt = r4.get("data", {}).get("Title", "")
@@ -93,12 +108,13 @@ async def process_video(session, api_base, bi, si, sn, ti, tn, video, hdr1):
         
         if fl:
             dfl = decrypt(fl)
-            final_link = f"https://youtu.be/{dfl}"
-            lines.append(f"{vt}:{final_link}\n")
+            if dfl:
+                final_link = f"https://youtu.be/{dfl}"
+                lines.append(f"{vt}:{final_link}\n")
 
         if vl:
             dvl = decrypt(vl)
-            if ".pdf" not in dvl: 
+            if dvl and ".pdf" not in dvl: 
                 lines.append(f"{vt}:{dvl}\n")
                  
         else:
@@ -111,14 +127,16 @@ async def process_video(session, api_base, bi, si, sn, ti, tn, video, hdr1):
                     da = decrypt(a)
                     k1 = decrypt(k)
                     k2 = decode_base64(k1)
-                    lines.append(f"{vt}:{da}*{k2}\n")
+                    if da and k2:
+                        lines.append(f"{vt}:{da}*{k2}\n")
                 elif a:
                     da = decrypt(a)
-                    lines.append(f"{vt}:{da}\n")
+                    if da:
+                        lines.append(f"{vt}:{da}\n")
         
         if "material_type" in r4.get("data", {}):
             mt = r4["data"]["material_type"]
-            if mt == "PDF":
+            if mt == "PDF" or mt == "VIDEO":
                 p1 = r4["data"].get("pdf_link", "")
                 pk1 = r4["data"].get("pdf_encryption_key", "")
                 p2 = r4["data"].get("pdf_link2", "")
@@ -127,55 +145,27 @@ async def process_video(session, api_base, bi, si, sn, ti, tn, video, hdr1):
                 if p1 and pk1:
                     dp1 = decrypt(p1)
                     depk1 = decrypt(pk1)
-                    if depk1 == "abcdefg":
-                        lines.append(f"{vt}:{dp1}\n")
-                    else:
-                        lines.append(f"{vt}:{dp1}*{depk1}\n")
+                    if dp1:
+                        if depk1 == "abcdefg":
+                            lines.append(f"{vt}:{dp1}\n")
+                        else:
+                            lines.append(f"{vt}:{dp1}*{depk1}\n")
                 if p2 and pk2:
                     dp2 = decrypt(p2)
                     depk2 = decrypt(pk2)
-                    if depk2 == "abcdefg":
-                        lines.append(f"{vt}:{dp2}\n")
-                    else:
-                        lines.append(f"{vt}:{dp2}*{depk2}\n")
-
-        
-        if "material_type" in r4.get("data", {}):
-            mt = r4["data"]["material_type"]
-            if mt == "VIDEO":
-                p1 = r4["data"].get("pdf_link", "")
-                pk1 = r4["data"].get("pdf_encryption_key", "")
-                p2 = r4["data"].get("pdf_link2", "")
-                pk2 = r4["data"].get("pdf2_encryption_key", "")
-                
-                if p1 and pk1:
-                    dp1 = decrypt(p1)
-                    depk1 = decrypt(pk1)
-                    if depk1 == "abcdefg":
-                        lines.append(f"{vt}:{dp1}\n")
-                    else:
-                        lines.append(f"{vt}:{dp1}*{depk1}\n")
-                if p2 and pk2:
-                    dp2 = decrypt(p2)
-                    depk2 = decrypt(pk2)
-                    if depk2 == "abcdefg":
-                        lines.append(f"{vt}:{dp2}\n")
-                    else:
-                        lines.append(f"{vt}:{dp2}*{depk2}\n")
+                    if dp2:
+                        if depk2 == "abcdefg":
+                            lines.append(f"{vt}:{dp2}\n")
+                        else:
+                            lines.append(f"{vt}:{dp2}*{depk2}\n")
                         
         return lines
     
     except Exception as e:
-        print(f"An error occurred while processing video ID {vi}: {str(e)}")
         return None
 
-            
-            
-THREADPOOL = ThreadPoolExecutor(max_workers=1000)
 @app.on_message(filters.command(["appx", "appx4", "apiv4"]))
-
 async def appex_v4_txt(app, message):
-    THREADPOOL = ThreadPoolExecutor(max_workers=1000)
     api_prompt = (
         "━━━━━━━━━━━━━━━━━━━━━\n"
         "🌐 <b>ᴇɴᴛᴇʀ ᴀᴘɪ ᴜʀʟ</b>\n"
@@ -204,13 +194,12 @@ async def appex_v4_txt(app, message):
         await app.send_message(message.chat.id, error_msg)
         
 async def appex_v5_txt(app, message, api, name):
-   
     api_base = api.replace("http://", "https://") if api.startswith(("http://", "https://")) else f"https://{api}"
     app_name = api_base.replace("http://", " ").replace("https://", " ").replace("api.classx.co.in"," ").replace("api.akamai.net.in", " ").replace("apinew.teachx.in", " ").replace("api.cloudflare.net.in", " ").replace("api.appx.co.in", " ").replace("/", " ")
     
     login_prompt = (
         "━━━━━━━━━━━━━━━━━━━━━\n"
-        "🔑 **Appx Extractor Login**\n"
+        "📱 **Appx Mobile Emulator**\n"
         "━━━━━━━━━━━━━━━━━━━━━\n\n"
         "**Now send your login credentials:**\n"
         "1) `mobile*password` for password login\n"
@@ -223,22 +212,39 @@ async def appex_v5_txt(app, message, api, name):
     await forward_to_log(input1, "Appex Extractor")
     raw_text = input1.text.strip()
     
+    # Base Mobile Emulator Headers
+    mobile_headers = {
+        "User-Agent": ANDROID_UA,
+        "source": "APP",
+        "device": "android",
+        "appx-version": "5.0.0",
+        "device-model": "SM-G991B",
+        "os-version": "11",
+        "Client-Service": "Appx",
+        "Auth-Key": "appxapi"
+    }
+
+    userid = "-2"
+    token = ""
+    
     if '*' in raw_text:
         email, password = raw_text.split("*")
         raw_url = f"{api_base}/post/userLogin"
-        headers = {"Auth-Key": "appxapi", "User-Id": "-2", "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "okhttp/4.9.1"}
+        login_hdr = mobile_headers.copy()
+        login_hdr["Content-Type"] = "application/x-www-form-urlencoded"
         data = {"email": email, "password": password}
+        
         try:
-            response = requests.post(raw_url, data=data, headers=headers).json()
+            # Cloudscraper POST inside thread to bypass 403
+            response = await asyncio.to_thread(sync_post, raw_url, data, login_hdr)
             status = response.get("status")
             if status == 200:
                 userid = str(response["data"]["userid"])
                 token = response["data"]["token"]
             elif status == 203:
                 second_api_url = f"{api_base}/post/userLogin?extra_details=0"
-                second_headers = {"auth-key": "appxapi", "client-service": "Appx", "source": "website"}
-                second_data = {"source": "website", "phone": email, "email": email, "password": password, "extra_details": "1"}
-                second_response = requests.post(second_api_url, headers=second_headers, data=second_data).json()
+                second_data = {"source": "APP", "phone": email, "email": email, "password": password, "extra_details": "1"}
+                second_response = await asyncio.to_thread(sync_post, second_api_url, second_data, login_hdr)
                 if second_response.get("status") == 200:
                     userid = str(second_response["data"]["userid"])
                     token = second_response["data"]["token"]
@@ -251,27 +257,22 @@ async def appex_v5_txt(app, message, api, name):
             
     elif raw_text.isdigit() and len(raw_text) == 10:
         url_otp = f"{api_base}/get/sendotp?phone={raw_text}"
-        otp_headers = {"Client-Service": "Appx", "Auth-Key": "appxapi", "source": "website"}
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url_otp, headers=otp_headers) as otp_resp:
-                    otp_json = await otp_resp.json()
-                    if otp_json.get("status") != 200:
-                        return await message.reply_text("❌ Failed to send OTP. Ensure the number is registered.")
+            otp_json = await asyncio.to_thread(sync_get, url_otp, mobile_headers)
+            if otp_json.get("status") != 200:
+                return await message.reply_text("❌ Failed to send OTP. Ensure the number is registered.")
             
             otp_input = await app.ask(message.chat.id, "📲 **OTP sent successfully!**\nPlease enter the OTP you received:")
             otp_code = otp_input.text.strip()
             
             verify_url = f"{api_base}/get/otpverify?useremail={raw_text}&otp={otp_code}&device_id=WebBrowser17267591437616qmd1cxx313"
-            async with aiohttp.ClientSession() as session:
-                async with session.get(verify_url, headers=otp_headers) as verify_resp:
-                    verify_json = await verify_resp.json()
-                    if verify_json.get("status") == 200:
-                        token = verify_json['user']['token']
-                        userid = str(verify_json['user'].get('userid', '-2'))
-                        await message.reply_text(f"✅ OTP Verified! Token extracted:\n`{token}`")
-                    else:
-                        return await message.reply_text("❌ Invalid OTP.")
+            verify_json = await asyncio.to_thread(sync_get, verify_url, mobile_headers)
+            if verify_json.get("status") == 200:
+                token = verify_json['user']['token']
+                userid = str(verify_json['user'].get('userid', '-2'))
+                await message.reply_text(f"✅ OTP Verified! Token extracted:\n`{token}`")
+            else:
+                return await message.reply_text("❌ Invalid OTP.")
         except Exception as e:
             return await message.reply_text(f"❌ OTP Process Failed: {str(e)}")
             
@@ -279,25 +280,21 @@ async def appex_v5_txt(app, message, api, name):
         userid = "extracted_userid_from_token"
         token = raw_text
 
-    hdr1 = {
-        "Client-Service": "Appx",
-        "source": "website",
-        "Auth-Key": "appxapi",
-        "Authorization": token,
-        "User-ID": userid
-    }  
+    # Complete Mobile Request Headers
+    hdr1 = mobile_headers.copy()
+    hdr1["Authorization"] = token
+    hdr1["User-ID"] = userid
         
-    # Bypass Cloudflare
-    hdr1["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-    hdr1["Accept"] = "application/json, text/plain, */*"
-
-    scraper = cloudscraper.create_scraper() 
     try:
         r = None
         for attempt in range(5):
-            r = scraper.get(f"{api_base}/get/mycoursev2?userid={userid}", headers=hdr1)
+            # Probe API for courses, wrapped in threadpool to prevent freezing
+            def get_mycourse(url, h):
+                return global_scraper.get(url, headers=h)
+            
+            r = await asyncio.to_thread(get_mycourse, f"{api_base}/get/mycoursev2?userid={userid}", hdr1)
+            
             if r.status_code == 429:
-                import asyncio
                 await asyncio.sleep(2 * (attempt + 1))
                 continue
             break
@@ -307,13 +304,7 @@ async def appex_v5_txt(app, message, api, name):
         mc1 = r.json()
 
     except Exception as e:
-        error_msg = (
-            "❌ <b>An error occurred during course fetching</b>\n\n"
-            f"Error details: <code>{str(e)}</code>\n"
-            f"Response snippet: <code>{r.text[:200] if 'r' in locals() else 'None'}</code>\n\n"
-            "Please try again or contact support."
-        )
-        return await message.reply_text(error_msg)
+        return await message.reply_text(f"❌ **Course Fetching Error**\n`{str(e)}`")
 
     batch_list = "📚 <b>ᴀᴠᴀɪʟᴀʙʟᴇ ʙᴀᴛᴄʜᴇs</b>\n━━━━━━━━━━━━━━━━━━━━━\n\n"
     valid_ids = []
@@ -348,12 +339,7 @@ async def appex_v5_txt(app, message, api, name):
         file_path = f"{app_name}_batches.txt"
         with open(file_path, "w") as file:
             file.write(f"{success_msg}\n\nToken: {token}")
-
-        await app.send_document(
-            message.chat.id,
-            document=file_path,
-            caption="📚 Batch list exported to file due to large size"
-        )
+        await app.send_document(message.chat.id, document=file_path, caption="📚 Batch list exported to file due to large size")
         await app.send_document(PREMIUM_LOGS, document=file_path)
         editable1 = None
 
@@ -374,30 +360,20 @@ async def appex_v5_txt(app, message, api, name):
     input2 = await app.ask(message.chat.id, batch_prompt)
 
     if not input2:
-        await message.reply_text("**Invalid input. Please send valid batch IDs.**")
-        await input2.delete(True)
-        if editable1:
-            await editable1.delete(True)
         return
 
     batch_ids = input2.text.strip().split("&")
     batch_ids = [batch.strip() for batch in batch_ids if batch.strip() in valid_ids]
 
     if not batch_ids:
-        await message.reply_text("**Invalid batch ID(s). Please send valid batch IDs from the list.**")
-        await input2.delete(True)
-        if editable1:
-            await editable1.delete(True)
         return
 
     m1 = await message.reply_text("Processing your requested batches...")
 
-    # Process each batch ID sequentially like v3
     for raw_text2 in batch_ids:
         m2 = await message.reply_text(f"Extracting batch `{raw_text2}`...")
         start_time = time.time()
         
-        # Get course details including thumbnail
         course_info = next((ct for ct in mc1["data"] if ct.get("id") == raw_text2), {})
         course_name = course_info.get("course_name", "Course")
         thumbnail = course_info.get("course_thumbnail", "")
@@ -406,11 +382,14 @@ async def appex_v5_txt(app, message, api, name):
         price = course_info.get("price", "N/A")
         
         try:
-            r = scraper.get(f"{api_base}/get/course_by_id?id={raw_text2}", headers=hdr1)
+            # Auto Detection Logic: Try course_by_id first, fallback if invalid
+            def get_course_by_id(url, h):
+                return global_scraper.get(url, headers=h)
+                
+            r = await asyncio.to_thread(get_course_by_id, f"{api_base}/get/course_by_id?id={raw_text2}", hdr1)
             try:
                 r_json = r.json()
             except:
-                # If JSON parsing fails, try v2_new method
                 sanitized_course_name = course_name.replace(':', '_').replace('/', '_')
                 await v2_new(app, message, token, userid, hdr1, app_name, raw_text2, api_base, sanitized_course_name, start_time, start_date, end_date, price, input2, m1, m2)
                 continue
@@ -423,74 +402,65 @@ async def appex_v5_txt(app, message, api, name):
             for i in r_json.get("data", []):
                 txtn = i.get("course_name")
                 filename = f"{raw_text2}_{txtn.replace(':', '_').replace('/', '_')}.txt"
-
                 if '/' in filename:
                     filename1 = filename.replace("/", "").replace(" ", "_")
                 else:
                     filename1 = filename
                 
-                async with aiohttp.ClientSession() as session:
-                    with open(filename1, 'w') as f:
-                        try:
-                            r1 = await fetch(session, f"{api_base}/get/allsubjectfrmlivecourseclass?courseid={raw_text2}&start=-1", hdr1)
-                
-                            for subject in r1.get("data", []):
-                                si = subject.get("subjectid")
-                                sn = subject.get("subject_name")
-
-                                r2 = await fetch(session, f"{api_base}/get/alltopicfrmlivecourseclass?courseid={raw_text2}&subjectid={si}&start=-1", hdr1)
-                                topics = sorted(r2.get("data", []), key=lambda x: x.get("topicid"))
-
-                                tasks = [handle_course(session, api_base, raw_text2, si, sn, t, hdr1) for t in topics]
-                                all_data = await asyncio.gather(*tasks)
-                    
-                                for data in all_data:
-                                    if data:
-                                        f.writelines(data)
-            
-                        except Exception as e:
-                            print(f"An error occurred while processing batch {raw_text2}: {str(e)}")
-                            await message.reply_text(f"⚠️ Error processing batch {raw_text2}. Trying alternative method...")
-                            sanitized_course_name = course_name.replace(':', '_').replace('/', '_')
-                            await v2_new(app, message, token, userid, hdr1, app_name, raw_text2, api_base, sanitized_course_name, start_time, start_date, end_date, price, input2, m1, m2)
-                            continue
-                        
-                    end_time = time.time()
-                    elapsed_time = end_time - start_time
-                    print(f"Elapsed time: {elapsed_time:.1f} seconds")
-                    
-                    # Using v3's caption format
-                    caption = (
-                        "࿇ ══━━ 🏦 ━━══ ࿇\n\n"
-                        f"🌀 **Aᴘᴘ Nᴀᴍᴇ** : {app_name}\n"
-                        f"============================\n\n"
-                        f"🎯 **Bᴀᴛᴄʜ Nᴀᴍᴇ** : `{raw_text2}_{txtn}`\n"
-                        f"🌟 **Cᴏᴜʀsᴇ Tʜᴜᴍʙɴᴀɪʟ** : <a href={thumbnail}>Thumbnail</a>\n\n"
-                        f"📅 **Sᴛᴀʀᴛ Dᴀᴛᴇ** : {start_date}\n"
-                        f"📅 **Eɴᴅ Dᴀᴛᴇ** : {end_date}\n"
-                        f"💰 **Pʀɪᴄᴇ** : ₹{price}\n\n"
-                        f"🌐 **Jᴏɪɴ Us** : {join}\n"
-                        f"⏱ **Tɪᴍᴇ Tᴀᴋᴇɴ** : {elapsed_time:.1f}s\n"
-                        f"📅 **Dᴀᴛᴇ** : {time_new}\n"
-                        "━━━━━━━━━━━━━━━━━━━━━\n"
-                        "🔰 ᴍᴀɪɴᴛᴀɪɴᴇᴅ ʙʏ @PRO_TXT_EXTRATOR_BOT"
-                    )
-                
+                with open(filename1, 'w', encoding='utf-8') as f:
                     try:
-                        await app.send_document(message.chat.id, filename1, caption=caption)
-                        await app.send_document(PREMIUM_LOGS, filename1, caption=caption)
-                        
+                        r1 = await fetch(f"{api_base}/get/allsubjectfrmlivecourseclass?courseid={raw_text2}&start=-1", hdr1)
+            
+                        for subject in r1.get("data", []):
+                            si = subject.get("subjectid")
+                            sn = subject.get("subject_name")
+
+                            r2 = await fetch(f"{api_base}/get/alltopicfrmlivecourseclass?courseid={raw_text2}&subjectid={si}&start=-1", hdr1)
+                            topics = sorted(r2.get("data", []), key=lambda x: x.get("topicid", 0))
+
+                            tasks = [handle_course(api_base, raw_text2, si, sn, t, hdr1) for t in topics]
+                            all_data = await asyncio.gather(*tasks)
+                
+                            for data in all_data:
+                                if data:
+                                    f.writelines(data)
+        
                     except Exception as e:
-                        print(f"An error occurred while sending the document: {str(e)}")
-                        await message.reply_text(f"⚠️ Error sending document for batch {raw_text2}")
+                        print(f"An error occurred while processing batch {raw_text2}: {str(e)}")
+                        await message.reply_text(f"⚠️ Error processing batch {raw_text2}. Trying alternative method...")
+                        sanitized_course_name = course_name.replace(':', '_').replace('/', '_')
+                        await v2_new(app, message, token, userid, hdr1, app_name, raw_text2, api_base, sanitized_course_name, start_time, start_date, end_date, price, input2, m1, m2)
+                        continue
                     
-                    finally:
-                        if os.path.exists(filename1):
-                            os.remove(filename1)
-                            
+                end_time = time.time()
+                elapsed_time = end_time - start_time
+                
+                caption = (
+                    "࿇ ══━━ 🏦 ━━══ ࿇\n\n"
+                    f"🌀 **Aᴘᴘ Nᴀᴍᴇ** : {app_name}\n"
+                    f"============================\n\n"
+                    f"🎯 **Bᴀᴛᴄʜ Nᴀᴍᴇ** : `{raw_text2}_{txtn}`\n"
+                    f"🌟 **Cᴏᴜʀsᴇ Tʜᴜᴍʙɴᴀɪʟ** : <a href={thumbnail}>Thumbnail</a>\n\n"
+                    f"📅 **Sᴛᴀʀᴛ Dᴀᴛᴇ** : {start_date}\n"
+                    f"📅 **Eɴᴅ Dᴀᴛᴇ** : {end_date}\n"
+                    f"💰 **Pʀɪᴄᴇ** : ₹{price}\n\n"
+                    f"🌐 **Jᴏɪɴ Us** : {join}\n"
+                    f"⏱ **Tɪᴍᴇ Tᴀᴋᴇɴ** : {elapsed_time:.1f}s\n"
+                    f"📅 **Dᴀᴛᴇ** : {time_new}\n"
+                    "━━━━━━━━━━━━━━━━━━━━━\n"
+                    "🔰 ᴍᴀɪɴᴛᴀɪɴᴇᴅ ʙʏ @PRO_TXT_EXTRATOR_BOT"
+                )
+            
+                try:
+                    await app.send_document(message.chat.id, filename1, caption=caption)
+                    await app.send_document(PREMIUM_LOGS, filename1, caption=caption)
+                except Exception as e:
+                    pass
+                finally:
+                    if os.path.exists(filename1):
+                        os.remove(filename1)
+                        
         except Exception as e:
-            print(f"Error processing batch {raw_text2}: {str(e)}")
-            await message.reply_text(f"⚠️ Failed to process batch {raw_text2}")
             sanitized_course_name = course_name.replace(':', '_').replace('/', '_')
             await v2_new(app, message, token, userid, hdr1, app_name, raw_text2, api_base, sanitized_course_name, start_time, start_date, end_date, price, input2, m1, m2)
         finally:
