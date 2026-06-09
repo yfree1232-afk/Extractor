@@ -106,6 +106,14 @@ async def process_video(api_base, bi, si, sn, ti, tn, video, hdr1):
         vl = r4.get("data", {}).get("download_link", "")
         fl = r4.get("data", {}).get("video_id", "")
         
+        prefix = ""
+        if sn and tn:
+            prefix = f"[{sn} → {tn}] "
+        elif sn:
+            prefix = f"[{sn}] "
+        elif tn:
+            prefix = f"[{tn}] "
+            
         if fl:
             dfl = decrypt(fl)
             if dfl:
@@ -113,12 +121,12 @@ async def process_video(api_base, bi, si, sn, ti, tn, video, hdr1):
                     final_link = f"https://appxsignurl.vercel.app/appx/{dfl}?appxv=3"
                 else:
                     final_link = f"https://youtu.be/{dfl}"
-                lines.append(f"{vt}:{final_link}\n")
+                lines.append(f"{prefix}{vt} : {final_link}\n")
 
         if vl:
             dvl = decrypt(vl)
             if dvl and ".pdf" not in dvl: 
-                lines.append(f"{vt}:{dvl}\n")
+                lines.append(f"{prefix}{vt} : {dvl}\n")
                  
         else:
             encrypted_links = r4.get("data", {}).get("encrypted_links", [])
@@ -131,11 +139,11 @@ async def process_video(api_base, bi, si, sn, ti, tn, video, hdr1):
                     k1 = decrypt(k)
                     k2 = decode_base64(k1)
                     if da and k2:
-                        lines.append(f"{vt}:{da}*{k2}\n")
+                        lines.append(f"{prefix}{vt} : {da}*{k2}\n")
                 elif a:
                     da = decrypt(a)
                     if da:
-                        lines.append(f"{vt}:{da}\n")
+                        lines.append(f"{prefix}{vt} : {da}\n")
         
         if "material_type" in r4.get("data", {}):
             mt = r4["data"]["material_type"]
@@ -150,17 +158,17 @@ async def process_video(api_base, bi, si, sn, ti, tn, video, hdr1):
                     depk1 = decrypt(pk1)
                     if dp1:
                         if depk1 == "abcdefg":
-                            lines.append(f"{vt}:{dp1}\n")
+                            lines.append(f"{prefix}{vt} : {dp1}\n")
                         else:
-                            lines.append(f"{vt}:{dp1}*{depk1}\n")
+                            lines.append(f"{prefix}{vt} : {dp1}*{depk1}\n")
                 if p2 and pk2:
                     dp2 = decrypt(p2)
                     depk2 = decrypt(pk2)
                     if dp2:
                         if depk2 == "abcdefg":
-                            lines.append(f"{vt}:{dp2}\n")
+                            lines.append(f"{prefix}{vt} : {dp2}\n")
                         else:
-                            lines.append(f"{vt}:{dp2}*{depk2}\n")
+                            lines.append(f"{prefix}{vt} : {dp2}*{depk2}\n")
                         
         return lines
     
@@ -385,55 +393,31 @@ async def appex_v5_txt(app, message, api, name):
         price = course_info.get("price", "N/A")
         
         try:
-            # Auto Detection Logic: Try course_by_id first, fallback if invalid
-            def get_course_by_id(url, h):
-                return global_scraper.get(url, headers=h)
-                
-            r = await asyncio.to_thread(get_course_by_id, f"{api_base}/get/course_by_id?id={raw_text2}", hdr1)
-            try:
-                r_json = r.json()
-            except:
-                sanitized_course_name = course_name.replace(':', '_').replace('/', '_')
-                await v2_new(app, message, token, userid, hdr1, app_name, raw_text2, api_base, sanitized_course_name, start_time, start_date, end_date, price, input2, m1, m2)
-                continue
-
-            if not r_json.get("data"):
-                sanitized_course_name = course_name.replace(':', '_').replace('/', '_')
-                await v2_new(app, message, token, userid, hdr1, app_name, raw_text2, api_base, sanitized_course_name, start_time, start_date, end_date, price, input2, m1, m2)
-                continue
-
-            for i in r_json.get("data", []):
-                txtn = i.get("course_name")
-                filename = f"{raw_text2}_{txtn.replace(':', '_').replace('/', '_')}.txt"
-                if '/' in filename:
-                    filename1 = filename.replace("/", "").replace(" ", "_")
-                else:
-                    filename1 = filename
-                
-                with open(filename1, 'w', encoding='utf-8') as f:
-                    try:
-                        r1 = await fetch(f"{api_base}/get/allsubjectfrmlivecourseclass?courseid={raw_text2}&start=-1", hdr1)
+            # Auto Detection Logic: Extract via V3/V4 Subject endpoints first
+            filename1 = f"{raw_text2}_{course_name.replace(':', '_').replace('/', '_')}.txt".replace(" ", "_")
             
-                        for subject in r1.get("data", []):
-                            si = subject.get("subjectid")
-                            sn = subject.get("subject_name")
+            r1 = await fetch(f"{api_base}/get/allsubjectfrmlivecourseclass?courseid={raw_text2}&start=-1", hdr1)
+            
+            if r1 and r1.get("data"):
+                with open(filename1, 'w', encoding='utf-8') as f:
+                    for subject in r1.get("data", []):
+                        si = subject.get("subjectid")
+                        sn = subject.get("subject_name")
 
-                            r2 = await fetch(f"{api_base}/get/alltopicfrmlivecourseclass?courseid={raw_text2}&subjectid={si}&start=-1", hdr1)
-                            topics = sorted(r2.get("data", []), key=lambda x: x.get("topicid", 0))
+                        r2 = await fetch(f"{api_base}/get/alltopicfrmlivecourseclass?courseid={raw_text2}&subjectid={si}&start=-1", hdr1)
+                        topics = sorted(r2.get("data", []), key=lambda x: x.get("topicid", 0))
 
-                            tasks = [handle_course(api_base, raw_text2, si, sn, t, hdr1) for t in topics]
-                            all_data = await asyncio.gather(*tasks)
-                
-                            for data in all_data:
-                                if data:
-                                    f.writelines(data)
-        
-                    except Exception as e:
-                        print(f"An error occurred while processing batch {raw_text2}: {str(e)}")
-                        await message.reply_text(f"⚠️ Error processing batch {raw_text2}. Trying alternative method...")
-                        sanitized_course_name = course_name.replace(':', '_').replace('/', '_')
-                        await v2_new(app, message, token, userid, hdr1, app_name, raw_text2, api_base, sanitized_course_name, start_time, start_date, end_date, price, input2, m1, m2)
-                        continue
+                        tasks = [handle_course(api_base, raw_text2, si, sn, t, hdr1) for t in topics]
+                        all_data = await asyncio.gather(*tasks)
+            
+                        for data in all_data:
+                            if data:
+                                f.writelines(data)
+            else:
+                # Fallback to V2 Folder Logic if no subjects are found
+                sanitized_course_name = course_name.replace(':', '_').replace('/', '_')
+                await v2_new(app, message, token, userid, hdr1, app_name, raw_text2, api_base, sanitized_course_name, start_time, start_date, end_date, price, input2, m1, m2)
+                continue
                     
                 end_time = time.time()
                 elapsed_time = end_time - start_time
