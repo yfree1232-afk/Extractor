@@ -287,21 +287,30 @@ async def appex_v5_txt(app, message, api, name):
         "User-ID": userid
     }  
         
+    # Bypass Cloudflare
+    hdr1["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    hdr1["Accept"] = "application/json, text/plain, */*"
+
     scraper = cloudscraper.create_scraper() 
     try:
-        mc1 = scraper.get(f"{api_base}/get/mycoursev2?userid={userid}", headers=hdr1).json()
-        
-    except json.JSONDecodeError as e:
-        error_msg = (
-            "❌ <b>An error occurred during extraction</b>\n\n"
-            f"Error details: <code>{str(e)}</code>\n\n"
-            "Please try again or contact support."
-        )
-        return await message.reply_text(error_msg)
+        r = scraper.get(f"{api_base}/get/mycoursev2?userid={userid}", headers=hdr1)
+        if r.status_code != 200:
+            return await message.reply_text(f"❌ **Server blocked the request!**
+Status: {r.status_code}
+Response:
+`{r.text[:500]}`")
+        mc1 = r.json()
+
     except Exception as e:
         error_msg = (
-            "❌ <b>An error occurred during extraction</b>\n\n"
-            f"Error details: <code>{str(e)}</code>\n\n"
+            "❌ <b>An error occurred during course fetching</b>
+
+"
+            f"Error details: <code>{str(e)}</code>
+"
+            f"Response snippet: <code>{r.text[:200] if 'r' in locals() else 'None'}</code>
+
+"
             "Please try again or contact support."
         )
         return await message.reply_text(error_msg)
