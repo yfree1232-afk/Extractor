@@ -106,21 +106,16 @@ async def process_ssc(bot: Client, m: Message, user_id: int):
         )
 
         # Extract course chapters
-        chapters_url = f"{api_base}/chapters/{course_id}"
-        chapters_resp = await fetch_json_get(session, chapters_url, headers=auth_headers)
-        
-        if not chapters_resp:
-            await status_msg.edit(f"❌ **Data Error**\n\nCould not fetch course chapters. Ensure you have purchased this course and logged in correctly.")
-            return
-            
         all_outputs = []
         
         def extract_links(node, current_topic=""):
             if isinstance(node, dict):
-                title = node.get("title") or node.get("chapterName") or node.get("videoTitle") or node.get("pdfName") or node.get("name")
-                vid_url = node.get("videoUrl") or node.get("videoLink") or node.get("pdfUrl") or node.get("url") or node.get("link")
+                title = node.get("title") or node.get("chapterTitle") or node.get("videoTitle") or node.get("originalname") or node.get("name")
+                vid_url = node.get("videoUrl") or node.get("videoLink") or node.get("pdfUrl") or node.get("url") or node.get("path")
                 
-                if vid_url and isinstance(vid_url, str) and vid_url.startswith("http"):
+                if vid_url and isinstance(vid_url, str) and (vid_url.startswith("http") or vid_url.startswith("www")):
+                    if not vid_url.startswith("http"):
+                        vid_url = "https://" + vid_url
                     safe_title = sanitize_filename(title) if title else "Untitled"
                     all_outputs.append(f"{safe_title}:{vid_url}\n")
                     
@@ -131,19 +126,15 @@ async def process_ssc(bot: Client, m: Message, user_id: int):
                 for item in node:
                     extract_links(item, current_topic)
 
-        extract_links(chapters_resp)
-        
-        # Additionally try fetching videos directly if chapters response is lacking
-        if len(all_outputs) == 0:
-            vids_url = f"{api_base}/videos/chapters/{course_id}"
-            vids_resp = await fetch_json_get(session, vids_url, headers=auth_headers)
-            if vids_resp:
-                extract_links(vids_resp)
-                
-            pdfs_url = f"{api_base}/pdfs/course/{course_id}"
-            pdfs_resp = await fetch_json_get(session, pdfs_url, headers=auth_headers)
-            if pdfs_resp:
-                extract_links(pdfs_resp)
+        vids_url = f"{api_base}/youtubeChapters/course/{course_id}"
+        vids_resp = await fetch_json_get(session, vids_url, headers=auth_headers)
+        if vids_resp:
+            extract_links(vids_resp)
+            
+        pdfs_url = f"{api_base}/pdfs/course/{course_id}"
+        pdfs_resp = await fetch_json_get(session, pdfs_url, headers=auth_headers)
+        if pdfs_resp:
+            extract_links(pdfs_resp)
         
         if len(all_outputs) == 0:
             await status_msg.edit("❌ No content found for this course. (Or content is locked).")
