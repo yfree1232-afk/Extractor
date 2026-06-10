@@ -111,7 +111,7 @@ async def process_ssc(bot: Client, m: Message, user_id: int):
         def extract_links(node, current_topic=""):
             if isinstance(node, dict):
                 title = node.get("title") or node.get("chapterTitle") or node.get("videoTitle") or node.get("originalname") or node.get("name")
-                vid_url = node.get("videoUrl") or node.get("videoLink") or node.get("pdfUrl") or node.get("url") or node.get("path")
+                vid_url = node.get("videoYoutubeLink") or node.get("cloudFrontUrl") or node.get("videoUrl") or node.get("videoLink") or node.get("pdfUrl") or node.get("url") or node.get("path")
                 
                 if vid_url and isinstance(vid_url, str) and (vid_url.startswith("http") or vid_url.startswith("www")):
                     if not vid_url.startswith("http"):
