@@ -85,7 +85,10 @@ custom_button = [[
                   InlineKeyboardButton("🎯 CʟᴀssPʟᴜs 🎯", callback_data="cpwp"),
                   InlineKeyboardButton("🏆 Sᴇʟᴇᴄᴛɪᴏɴ Wᴀʏ 🏆", callback_data="selectionwaywp")
                 ],[
-                  InlineKeyboardButton("🎓 FᴜᴛᴜʀᴇKᴜʟ 🎓", callback_data="futurekul_")
+                  InlineKeyboardButton("🎓 FᴜᴛᴜʀᴇKᴜʟ 🎓", callback_data="futurekul_"),
+                  InlineKeyboardButton("⚕️ DAMS ⚕️", callback_data="dams_")
+                ],[
+                  InlineKeyboardButton("🗻 Pɪɴɴᴀᴄʟᴇ 🗻", callback_data="ssc_")
                 ],[
                   InlineKeyboardButton("𝐁 𝐀 𝐂 𝐊", callback_data="modes_")
                 ]]
