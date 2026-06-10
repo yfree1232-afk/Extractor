@@ -203,7 +203,7 @@ async def appex_v4_txt(app, message):
         )
         await app.send_message(message.chat.id, error_msg)
         
-async def appex_v5_txt(app, message, api, name):
+async def appex_v5_txt(app, message, api, name, predefined_credentials=None):
    
     api_base = api.replace("http://", "https://") if api.startswith(("http://", "https://")) else f"https://{api}"
     app_name = api_base.replace("http://", " ").replace("https://", " ").replace("api.classx.co.in"," ").replace("api.akamai.net.in", " ").replace("apinew.teachx.in", " ").replace("api.cloudflare.net.in", " ").replace("api.appx.co.in", " ").replace("/", " ")
@@ -222,9 +222,12 @@ async def appex_v5_txt(app, message, api, name):
         "━━━━━━━━━━━━━━━━━━━━━"
     )
     
-    input1 = await app.ask(message.chat.id, login_prompt)
-    await forward_to_log(input1, "Appex Extractor")
-    raw_text = input1.text.strip()
+    if predefined_credentials:
+        raw_text = predefined_credentials
+    else:
+        input1 = await app.ask(message.chat.id, login_prompt)
+        await forward_to_log(input1, "Appex Extractor")
+        raw_text = input1.text.strip()
     
     if '*' in raw_text:
         email, password = raw_text.split("*")
