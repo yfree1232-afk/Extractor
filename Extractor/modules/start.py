@@ -115,6 +115,7 @@ button1 = [
                     InlineKeyboardButton("👑 Rᴀɴᴋᴇʀs Gᴜʀᴜᴋᴜʟ", callback_data="maintainer_")
                 ],
                 [
+                    InlineKeyboardButton("🎓 FᴜᴛᴜʀᴇKᴜʟ 🎓", callback_data="futurekul_"),
                     InlineKeyboardButton("𝐁 𝐀 𝐂 𝐊", callback_data="modes_")
                 ]
                 ]
@@ -792,6 +793,10 @@ async def handle_callback(client, query):
         await ak_start(app, query.message)
     elif query.data == "exampur_txt":
         await exampur_txt(app, query.message)
+    elif query.data == "futurekul_":
+        api = "futurekulcollegeapi.classx.co.in"
+        name = "Futurekul"
+        await appex_v5_txt(app, query.message, api, name)
 
 def get_alphabet_keyboard():
     """Create a keyboard with A-Z buttons in a modern style"""
