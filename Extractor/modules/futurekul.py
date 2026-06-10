@@ -10,46 +10,23 @@ from pyrogram.types import Message
 from Extractor import app
 from config import BOT_TEXT
 
-EMAIL = "yolesa9970@5nek.com"
-PASSWORD = "123123123"
-CUSTOMER_ID = 135
-
 def sanitize_filename(name):
-    name = re.sub(r'[<>:"/\\|?*]', '_', name)
+    name = re.sub(r'[<>:"/\\|?*]', '_', str(name))
     name = re.sub(r'\s+', '_', name)
     name = re.sub(r'_+', '_', name)
     name = name.strip('_. ')
     return name if name else "Unknown_Course"
 
-async def get_futurekul_session_and_build(session):
-    # 1. Get Next.js Build ID
-    build_id = None
+async def get_futurekul_build_id(session):
     try:
         async with session.get("https://www.futurekul.com/", timeout=15) as resp:
             text = await resp.text()
             match = re.search(r'"buildId"\:"(.*?)"', text)
             if match:
-                build_id = match.group(1)
+                return match.group(1)
     except Exception as e:
         logging.error(f"Error fetching Futurekul build ID: {e}")
-        
-    # 2. Login to get ci_session cookie
-    login_url = "https://www.futurekul.com/admin/api/user-login"
-    login_data = {
-        "email": EMAIL,
-        "password": PASSWORD,
-        "logged_in_via": "web",
-        "customer_id": CUSTOMER_ID
-    }
-    headers = {"User-Agent": "Mozilla/5.0"}
-    try:
-        async with session.post(login_url, json=login_data, headers=headers, timeout=15) as resp:
-            data = await resp.json()
-            user_id = data.get("data", {}).get("user_id")
-            return build_id, user_id
-    except Exception as e:
-        logging.error(f"Error logging into Futurekul: {e}")
-        return build_id, None
+    return None
 
 async def fetch_json(session, url):
     try:
@@ -57,8 +34,15 @@ async def fetch_json(session, url):
             if resp.status == 200:
                 return await resp.json()
     except Exception as e:
-        pass
+        logging.error(f"Error fetching JSON from {url}: {e}")
     return None
+
+def clean_html(raw_html):
+    if not raw_html:
+        return "Untitled"
+    cleanr = re.compile('<.*?>')
+    cleantext = re.sub(cleanr, '', raw_html)
+    return cleantext.strip()
 
 async def process_futurekul(bot: Client, m: Message, user_id: int):
     loop = asyncio.get_event_loop()
@@ -68,12 +52,12 @@ async def process_futurekul(bot: Client, m: Message, user_id: int):
         editable = await m.reply_text("Fetching Futurekul courses... Please wait.")
         
         try:
-            build_id, backend_user_id = await get_futurekul_session_and_build(session)
+            build_id = await get_futurekul_build_id(session)
             if not build_id:
                 await editable.edit("Failed to connect to Futurekul frontend.")
                 return
                 
-            # Fetch ALL active courses from Next.js
+            # Fetch ALL active courses from Next.js without needing auth
             courses_url = f"https://www.futurekul.com/_next/data/{build_id}/en-US/courses.json"
             courses_data = await fetch_json(session, courses_url)
             
@@ -130,65 +114,72 @@ async def process_futurekul(bot: Client, m: Message, user_id: int):
             selected_idx = int(user_choice) - 1
             selected_batch = batches[selected_idx]
             course_id = selected_batch.get("id")
+            slug = selected_batch.get("slug")
             batch_title = selected_batch.get("title", "Unknown Batch")
             clean_batch_name = sanitize_filename(batch_title)
             
             status_msg = await m.reply_text(
                 "🔄 <b>Processing Course</b>\n"
                 f"└─ Current: <code>{batch_title}</code>\n"
-                f"(Futurekul API may return 'No Data Found' if course is not purchased by the dummy account.)"
+                f"Extracting content directly from Futurekul..."
             )
             
-            # Fetch topics via Admin API
-            # Futurekul requires the user to own the course to fetch contents!
-            topics_url = f"https://www.futurekul.com/admin/api/course/topic-and-section?courseId={course_id}"
-            topics_data = await fetch_json(session, topics_url)
+            # Fetch course detail directly from Next.js payload
+            detail_url = f"https://www.futurekul.com/_next/data/{build_id}/en-US/courses/{slug}/{course_id}.json?slug={slug}&id={course_id}"
+            detail_data = await fetch_json(session, detail_url)
             
-            if not topics_data or topics_data.get("state") != 200 or topics_data.get("msg") == "No Data Found":
-                await status_msg.edit(f"❌ <b>Access Denied or No Data</b>\n\nFuturekul server rejected access to {batch_title}. The dummy account must have purchased this course to extract topics.")
+            if not detail_data or 'pageProps' not in detail_data:
+                await status_msg.edit(f"❌ <b>Data Error</b>\n\nCould not fetch course details for {batch_title}.")
                 return
                 
-            topics = topics_data.get("data", {}).get("topics", [])
-            
-            if not topics:
-                await status_msg.edit("❌ No topics found for this batch.")
-                return
-                
+            course_detail = detail_data['pageProps'].get('courseDetail', {})
             all_outputs = []
             
-            # Note: For full extraction, we would loop through topics and fetch classes
-            # Since we can't test it, we assume it's like Selection Way
-            for topic in topics:
-                topic_id = topic.get("topicId")
-                topic_name = topic.get("topicName", "Unknown Topic")
-                all_outputs.append(f"\n{topic_name}\n\n")
-                
-                classes_url = f"https://www.futurekul.com/admin/api/topics/{topic_id}/classes?courseId={course_id}"
-                classes_data = await fetch_json(session, classes_url)
-                classes = classes_data.get("data", {}).get("classes", []) if classes_data else []
-                
-                for cls in classes:
-                    title = cls.get("title", "Untitled")
-                    hls_link = cls.get("class_link", "")
-                    if hls_link:
-                        all_outputs.append(f"{title}:{hls_link}\n")
-                        
-                    mp4s = cls.get("mp4Recordings", [])
-                    if mp4s:
-                        for mp4 in mp4s:
-                            url = mp4.get("url", "")
-                            if url:
-                                all_outputs.append(f"{title}:{url}\n")
+            # 1. Process Paid Classes (Topics & Videos)
+            paid_classes = course_detail.get('paid_class', [])
+            if isinstance(paid_classes, list):
+                for topic in paid_classes:
+                    topic_name = topic.get('topic', 'Unknown Topic')
+                    classes = topic.get('class', [])
+                    if classes:
+                        all_outputs.append(f"\n{topic_name}\n\n")
+                        for cls in classes:
+                            c_name = clean_html(cls.get('class_name', 'Untitled'))
+                            c_link = cls.get('link', '')
+                            if c_link:
+                                all_outputs.append(f"{c_name}:{c_link}\n")
+
+            # 2. Process PDFs
+            pdfs = course_detail.get('pdf', [])
+            if isinstance(pdfs, list):
+                for p_topic in pdfs:
+                    topic_name = p_topic.get('topic_name', 'PDFs')
+                    pdf_list = p_topic.get('pdf', [])
+                    if pdf_list:
+                        all_outputs.append(f"\n{topic_name} (PDFs)\n\n")
+                        for p in pdf_list:
+                            p_name = clean_html(p.get('pdf_name') or p.get('pdf_title') or 'Untitled PDF')
+                            p_url = p.get('pdf_url', '')
+                            if p_url:
+                                if not p_url.startswith('http'):
+                                    p_url = f"https://www.futurekul.com/admin/{p_url}"
+                                all_outputs.append(f"{p_name}:{p_url}\n")
                                 
-                    pdfs = cls.get("classPdf", [])
-                    if pdfs:
-                        for pdf in pdfs:
-                            pdf_url = pdf.get("url", "")
-                            if pdf_url:
-                                all_outputs.append(f"{title} PDF:{pdf_url}\n")
-                                
+            # 3. Process Free/Demo Classes (if any)
+            for free_key in ['free_class', 'demoVideos', 'freeDemoVideo']:
+                free_items = course_detail.get(free_key, [])
+                if isinstance(free_items, list) and free_items:
+                    valid_items = [i for i in free_items if isinstance(i, dict) and i.get('link')]
+                    if valid_items:
+                        all_outputs.append(f"\nFree / Demo ({free_key})\n\n")
+                        for item in valid_items:
+                            c_name = clean_html(item.get('class_name', 'Untitled Demo'))
+                            c_link = item.get('link', '')
+                            if c_link:
+                                all_outputs.append(f"{c_name}:{c_link}\n")
+
             if len(all_outputs) == 0:
-                await status_msg.edit("❌ No content found.")
+                await status_msg.edit("❌ No content found for this course.")
                 return
                 
             clean_file_name = f"{user_id}_{clean_batch_name}"
@@ -197,8 +188,8 @@ async def process_futurekul(bot: Client, m: Message, user_id: int):
             with open(f"{clean_file_name}.txt", 'w', encoding='utf-8') as f:
                 f.write(content)
                 
-            video_count = sum(1 for line in all_outputs if not line.endswith(".pdf\\n") and "PDF:" not in line and ":" in line)
-            pdf_count = sum(1 for line in all_outputs if "PDF:" in line)
+            video_count = sum(1 for line in all_outputs if not line.endswith(".pdf\n") and ":" in line and "http" in line and ".pdf" not in line.lower())
+            pdf_count = sum(1 for line in all_outputs if ":" in line and ".pdf" in line.lower())
             total_links = video_count + pdf_count
             
             caption = (
@@ -244,3 +235,4 @@ async def futurekul_callback(client, callback_query):
             await callback_query.message.reply_text(f"Error: {str(e)}")
         except:
             pass
+
