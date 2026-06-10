@@ -271,6 +271,10 @@ async def appex_v5_txt(app, message, api, name):
                 if second_response.get("status") == 200:
                     userid = second_response["data"]["userid"]
                     token = second_response["data"]["token"]
+                else:
+                    return await message.reply_text("❌ <b>Login Failed</b>\n\nInvalid Login Credentials.")
+            else:
+                return await message.reply_text(f"❌ <b>Login Failed</b>\n\nStatus Code: {status}")
         except Exception as e:
             error_msg = (
                 "❌ <b>Login Failed</b>\n\n"
