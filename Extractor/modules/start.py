@@ -40,6 +40,9 @@ from Extractor.modules.freecp import *
 from Extractor.modules.freeappx import *
 from Extractor.modules.freepw import *
 from Extractor.modules.selectionway import *
+from Extractor.modules.jchemistry import *
+from Extractor.modules.taiyarikarlo import *
+from Extractor.modules.ifas import *
 # from Extractor.modules.cds import handle_cds_callback
 
 from Extractor.core.mongo import plans_db
@@ -799,6 +802,15 @@ async def handle_callback(client, query):
         await adda_command_handler(app, query.message)
     elif query.data == "classplus_":
         await classplus_txt(app, query.message)
+
+    elif query.data == "jchemistry_":
+        await jchemistry(app, query.message)
+        
+    elif query.data == "taiyari_karlo":
+        await taiyari_karlo(app, query.message)
+        
+    elif query.data == "ifas_":
+        await ifas(app, query.message)
     elif query.data == "ak_":
         await ak_start(app, query.message)
     elif query.data == "exampur_txt":
